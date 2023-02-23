@@ -1,0 +1,66 @@
+#Contrainte en Language de définition de données (LDD):
+ALTER TABLE Subvention   ADD PRIMARY KEY (RefDossier,RefAssociation,RefDirection);
+ALTER TABLE Direction    MODIFY Sigledirection text(50) NOT NULL;
+ALTER TABLE Demande      MODIFY Annéebudgétaire INT NOT NULL CHECK (Annéebudgétaire>=2019);
+ALTER TABLE associations MODIFY N°Siret BIGINT NOT NULL UNIQUE ;
+ALTER TABLE Demande      ADD FOREIGN KEY (RefAssociation) references Associations(N°Siret);
+ALTER TABLE Subvention   ADD FOREIGN KEY (RefDossier) references Demande(N°Dossier);
+ALTER TABLE Subvention   ADD FOREIGN KEY (RefDirection) references Direction(CodeDirection);
+
+#Requete Ajout ligne / colonne / table :
+Update Subvention set Montantvoté=0 where Nature="Non précisée" ; #requete de mise a jour de donnée LMD necessaire pour la creation de la Nouvelle table Refus
+Create table if not exists Refus (
+	RefDossier varchar(10) NOT NULL PRIMARY KEY  ,
+    Annéebudgétaire int ,
+    RefSiret bigint,
+    Motif varchar(100) default "DonnéesInsuffisantes" 
+);
+ALTER TABLE Refus ADD FOREIGN KEY (RefDossier) references demande (N°Dossier);
+ALTER TABLE Refus ADD FOREIGN KEY (RefSiret) references associations(N°Siret);
+INSERT INTO Refus SELECT d.N°Dossier,d.Annéebudgétaire,d.RefAssociation,"DonnéesInsuffisantes"  
+FROM Demande d inner join subvention s on d.N°Dossier = s.RefDossier where Montantvoté=0;
+#--->Insertion de lignes : 
+INSERT INTO Demande(N°Dossier,Objetdudossier,Annéebudgétaire,Nombénéficiaire,RefAssociation) 
+VALUES('2020_2020','RALLYE CITOYEN',2020,'A.P.S.A.J',78475701500044);
+INSERT INTO Subvention(RefDossier,RefAssociation,RefDirection,Montantvoté,Nature,BUTAssociation) 
+VALUES ('2020_2020',78475701500044,25,5527,'Investissement','RALLYE CITOYEN');
+#Requetes de mise a jour de donnée LMD :
+Update Refus set Motif="TropdeDemandes" where RefSiret=40864600800057 ;
+Update Refus set Motif="DossierInvalide" where RefSiret=77566206700088 ;
+Update Refus set Motif="Encours" where RefSiret=81147565600013;
+Update Subvention s inner join demande d on d.N°Dossier = s.RefDossier set Montantvoté=7500 where  Nombénéficiaire = "AMICALE DAX";
+Update Subvention set Montantvoté=Montantvoté+100 where Nature="Investissement";
+Delete FROM Refus where Motif="EnCours";
+DELETE FROM associations where (N°Siret NOT IN( select RefAssociation from demande)) ;    
+DELETE FROM direction where (CodeDirection NOT IN (select RefDirection from subvention) or Sigledirection is NULL) ;
+
+#Requetes avec Fonctions d'Agregations :
+Select count(N°Dossier) from demande where Annéebudgétaire=2020;
+select RefAssociation , count(N°Dossier) as NombredeDossier from demande group by RefAssociation order by count(N°Dossier) desc  ; 
+Select avg(Montantvoté) as moyenne2020 from subvention s inner join demande d on d.N°Dossier=s.RefDossier where Annéebudgétaire=2020 order by moyenne2020 ;
+Select avg(Montantvoté) as moyenne2019 from subvention s inner join demande d on d.N°Dossier=s.RefDossier where Annéebudgétaire=2019 order by moyenne2019 ;
+#-->alors la moyenne de subvention en 2019 est superieur de celle en 2020
+Select count(RefDossier) as nombredeDOSSIER , Nomdirection from subvention s  inner join direction di on di.CodeDirection=s.RefDirection  where Nomdirection="Direction de la jeunesse et des sports";
+Select RefAssociation  , Max(Montantvoté) as MAXSomme from Subvention ; 
+Select RefAssociation ,  Min(Montantvoté) as MINSomme from subvention where Montantvoté!=0;
+Select sum(Montantvoté) as Totalsubvention from subvention ; 
+Select Secteuractivités , count(N°Dossier) as NombreDossier from demande d inner join associations a on d.RefAssociation=a.N°Siret where Secteuractivités="Défense des droits et des intérêts;Santé;Social" ;
+Select N°Siret ,RefDossier, count(Motif) as Motif from Refus r inner join demande d on d.N°Dossier=r.RefDossier inner join associations a on d.RefAssociation=a.N°Siret where Motif="DossierInvalide";
+Select Sigledirection , ROUND(avg(Montantvoté)) from direction di inner join subvention s on di.CodeDirection=s.RefDirection where  Nomdirection="Direction des espaces verts et de l’environnement";
+
+#Requetes Basiques et Requetes avec jointures : 
+SELECT RefAssociation from subvention where Montantvoté>=2000; 
+SELECT N°Siret,N°Dossier from associations a inner join demande d on a.N°Siret=d.RefAssociation ;
+SELECT N°Siret from associations where N°Siret NOT IN( select RefAssociation from demande) ;    
+SELECT Nombénéficiaire , Montantvoté from subvention s 
+inner join demande d on d.N°Dossier = s.RefDossier group by Nombénéficiaire having Montantvoté>0; 
+SELECT N°Siret , Nombénéficiaire from associations a inner join demande d on a.N°Siret=d.RefAssociation where Nombénéficiaire="AGORA";
+SELECT * from demande where Annéebudgétaire=2019;
+SELECT N°Siret from Associations where RIGHT(N°Siret,2)>LEFT(N°Siret,2) ; 
+SELECT * from demande where Nombénéficiaire Like '%I';
+SELECT RefAssociation, UPPER(Nombénéficiaire) ,UPPER(objetdudossier), N°dossier from demande;
+EXPLAIN SELECT * from subvention;
+SELECT * from Refus where LEFT(RefSiret,1)!=4;
+SELECT N°Siret , CodeDirection ,UPPER(Sigledirection) From direction d inner join subvention s on d.CodeDirection=s.RefDirection 
+inner join associations a on s.RefAssociation=a.N°Siret where CodeDirection=RIGHT(N°Siret , 1) order by N°Siret;
+SELECT * from subvention where Montantvoté!=0 group by RefDossier order by Montantvoté ;
